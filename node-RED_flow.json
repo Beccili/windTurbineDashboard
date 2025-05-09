@@ -1,0 +1,384 @@
+[
+    {
+        "id": "0d755ec2dbc73aa9",
+        "type": "tab",
+        "label": "Flow 1",
+        "disabled": false,
+        "info": "",
+        "env": []
+    },
+    {
+        "id": "ce39622d40d185ee",
+        "type": "inject",
+        "z": "0d755ec2dbc73aa9",
+        "name": "DataInput",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "5",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 140,
+        "y": 160,
+        "wires": [
+            [
+                "8b7198cbaf3f709c"
+            ]
+        ]
+    },
+    {
+        "id": "7d7f238255856254",
+        "type": "function",
+        "z": "0d755ec2dbc73aa9",
+        "name": "BuildPutItem",
+        "func": "// ------------- 取一行并校验 -------------\nconst r = msg.payload;\nif (!r.turbineId || !r.ts) {\n    node.warn('missing turbineId or ts, drop');\n    return null;\n}\n\n// ------------- 时间转 ISO -------------\nlet ts;\ntry {\n    ts = new Date(\n        r.ts.endsWith('Z') ? r.ts : r.ts + '00:00:00Z'\n    ).toISOString();\n} catch {\n    node.warn(`bad time: ${r.ts}`);\n    return null;\n}\n\n// ------------- 数值清洗 -------------\nfunction num(val, fix=null){\n    const n = Number(val);\n    return Number.isNaN(n) ? null : (fix==null ? n : Number(n.toFixed(fix)));\n}\n\nconst item = {\n  turbineId: { S: String(r.turbineId) },\n  ts:        { S: ts }\n};\n\nconst map = { windSpeed:2, rpm:null, bearingTemp:1, vibration:2, power:null };\nfor (const [k,f] of Object.entries(map)) {\n    const v = num(r[k], f);\n    if (v !== null) item[k] = { N: String(v) };\n}\n\n// ------------- 输出给 simple‑aws -------------\nmsg.params = {\n  TableName: 'Telemetry',\n  Item: item\n};\nreturn msg;\n\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 430,
+        "y": 320,
+        "wires": [
+            [
+                "4f59884c51d57a92"
+            ]
+        ]
+    },
+    {
+        "id": "92122267ff10328a",
+        "type": "split",
+        "z": "0d755ec2dbc73aa9",
+        "name": "",
+        "splt": "/n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "",
+        "property": "payload",
+        "x": 270,
+        "y": 320,
+        "wires": [
+            [
+                "7d7f238255856254"
+            ]
+        ]
+    },
+    {
+        "id": "4f59884c51d57a92",
+        "type": "simple-aws",
+        "z": "0d755ec2dbc73aa9",
+        "aws": "13faf7c78fa70b93",
+        "name": "BuildPutItem",
+        "service": "DynamoDB",
+        "serviceOptions": "{}",
+        "operation": "putItem",
+        "apiVersion": "2012-08-10",
+        "parameter": "params",
+        "parameterType": "msg",
+        "paging": "disabled",
+        "x": 630,
+        "y": 320,
+        "wires": [
+            [
+                "79e830e8b870c47e"
+            ],
+            []
+        ]
+    },
+    {
+        "id": "8b7198cbaf3f709c",
+        "type": "file in",
+        "z": "0d755ec2dbc73aa9",
+        "name": "",
+        "filename": "/Users/zhouplus/projects/python/machineLearning01/turbine_info.csv",
+        "filenameType": "str",
+        "format": "utf8",
+        "chunk": false,
+        "sendError": false,
+        "encoding": "none",
+        "allProps": false,
+        "x": 490,
+        "y": 160,
+        "wires": [
+            [
+                "b2e282ba39e45a69"
+            ]
+        ]
+    },
+    {
+        "id": "b2e282ba39e45a69",
+        "type": "csv",
+        "z": "0d755ec2dbc73aa9",
+        "name": "",
+        "spec": "rfc",
+        "sep": ",",
+        "hdrin": true,
+        "hdrout": "none",
+        "multi": "mult",
+        "ret": "\\r\\n",
+        "temp": "",
+        "skip": "0",
+        "strings": true,
+        "include_empty_strings": "",
+        "include_null_values": "",
+        "x": 130,
+        "y": 320,
+        "wires": [
+            [
+                "92122267ff10328a"
+            ]
+        ]
+    },
+    {
+        "id": "79e830e8b870c47e",
+        "type": "function",
+        "z": "0d755ec2dbc73aa9",
+        "name": "GetData",
+        "func": "// 上一步刚写入的那条记录就在 msg.params.Item\nconst it = msg.params.Item;\n\n// 转成普通对象\nconst record = {\n    turbineId: it.turbineId.S,\n    ts: it.ts.S,\n    windSpeed: parseFloat(it.windSpeed.N || 0),\n    rpm: parseInt(it.rpm.N || 0),\n    bearingTemp: parseFloat(it.bearingTemp.N || 0),\n    vibration: parseFloat(it.vibration.N || 0),\n    power: parseInt(it.power.N || 0)\n};\n\n\nmsg.payload = record;\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 140,
+        "y": 440,
+        "wires": [
+            [
+                "a9cd702e42f81cb9"
+            ]
+        ]
+    },
+    {
+        "id": "a9cd702e42f81cb9",
+        "type": "function",
+        "z": "0d755ec2dbc73aa9",
+        "name": "formParameters",
+        "func": "const record = msg.payload;\nconst systemPrompt = `You are an AI assistant specialized in analyzing wind turbine operational data. Your task is to evaluate the health status of a wind turbine based on the provided JSON data and the specific operational standards defined below.\n\nYou MUST determine if the turbine is operating normally or if there is a potential fault. Based on this determination, you will assign a fault status, a severity level (if applicable), and a confidence score for your assessment.\n\n**Operational Standards:**\n\n*   **Wind Speed (\\`windSpeed\\`, m/s):**\n    *   Cut-in: 3 m/s\n    *   Rated: ~11-12 m/s\n    *   Cut-out: 25 m/s\n    *   Expected Power Relation: 0-3 m/s -> 0 kW; 3-25 m/s -> power curve; > 25 m/s -> 0 kW.\n*   **Rotor Speed (\\`rpm\\`):**\n    *   Typical Operating Range: 10-25 rpm (when wind is 3-25 m/s)\n    *   Expected Behavior: < 3 m/s -> ~0 rpm; 3-25 m/s -> 10-25 rpm; > 25 m/s -> 0 rpm.\n    *   **Note:** Carefully check the input \\`rpm\\` value against this standard (10-25 rpm typical range). If the input value (like 965) seems inconsistent unit-wise, flag it as a potential high-severity issue or inconsistency unless context suggests otherwise.\n*   **Bearing Temperature (\\`bearingTemp\\`, °C):**\n    *   Normal Range: 45-65 °C\n    *   Warning: Approaching 70 °C\n    *   Potential Fault: > 70 °C, especially spikes towards 80-90 °C.\n*   **Vibration (\\`vibration\\`, mm/s RMS):**\n    *   Normal: <= 2.8 mm/s\n    *   Warning/Caution: 2.8 - 4.5 mm/s\n    *   Fault/Alarm: > 4.5 mm/s\n*   **Power Output (\\`power\\`, kW):**\n    *   Rated Power: ~2300 kW (reference)\n    *   Expected Behavior: Consistent with \\`windSpeed\\` and \\`rpm\\`.\n\n**Fault Detection, Severity Assignment, and Confidence Score:**\n\n1.  **Analyze** the input data against the operational standards.\n2.  **Determine \\`fault\\` status:**\n    *   \\`fault = 0\\`: If all parameters are within normal ranges and consistent with each other according to the standards.\n    *   \\`fault = 1\\`: If ANY standard is violated or a significant inconsistency is detected.\n3.  **Assign \\`severity\\` level (Integer):**\n    *   If \\`fault = 0\\`, then \\`severity = 0\\`.\n    *   If \\`fault = 1\\`, assign severity based on the detected issue(s):\n        *   \\`severity = 1\\` (Low/Warning): Minor deviations, values in warning ranges (e.g., \\`vibration\\` 2.8-4.5), slight inconsistencies.\n        *   \\`severity = 2\\` (Medium): Moderate deviations (e.g., \\`bearingTemp\\` > 70°C but < 80°C), clear operational inconsistencies (e.g., moderate power underperformance).\n        *   \\`severity = 3\\` (High/Critical): Critical thresholds exceeded (e.g., \\`vibration\\` > 4.5, \\`bearingTemp\\` > 80°C), major operational failures (e.g., failure to cut-out/cut-in, extremely inconsistent \\`rpm\\` like 965 when expecting 10-25, zero power/rpm during expected operation).\n    *   If multiple faults exist, assign the severity of the *most critical* fault detected.\n4.  **Assign \\`score\\` (Float, 0.0 to 1.0):**\n    *   This score represents the **confidence** of your *overall assessment* (the combination of \\`fault\\` and \\`severity\\` values you determined).\n    *   A score closer to 1.0 indicates high confidence in the assessment (whether it's normal or a specific fault/severity level).\n    *   A score closer to 0.5 might indicate borderline cases or lower certainty.\n\n**Output Requirements:**\nYour response MUST be a valid JSON object adhering strictly to the following OpenAPI Schema. Do NOT include any text before or after the JSON object.\n\n\\`\\`\\`json\n{\n  \"type\": \"object\",\n  \"properties\": {\n    \"turbineId\": {\n      \"type\": \"string\",\n      \"description\": \"The unique identifier of the turbine, copied from the input.\"\n    },\n    \"ts\": {\n      \"type\": \"string\",\n      \"format\": \"date-time\",\n      \"description\": \"The timestamp of the reading, copied from the input.\"\n    },\n    \"fault\": {\n      \"type\": \"integer\",\n      \"description\": \"Indicates the presence of a fault based on the standards. 0 means normal operation, 1 means a potential fault is detected.\"\n    },\n    \"severity\": {\n      \"type\": \"integer\",\n      \"description\": \"Indicates the severity level of the fault. 0 if fault=0. 1=Low/Warning, 2=Medium, 3=High/Critical if fault=1. Based on the most critical issue found.\"\n    },\n    \"score\": {\n      \"type\": \"number\",\n      \"format\": \"float\",\n      \"description\": \"Confidence score (0.0 to 1.0) for the overall assessment (fault status and severity).\"\n    }\n  },\n  \"required\": [\n    \"turbineId\",\n    \"ts\",\n    \"fault\",\n    \"severity\",\n    \"score\"\n  ]\n}\n\\`\\`\\`\n\nEnsure you copy \\`turbineId\\` and \\`ts\\` from the input. Evaluate the input data carefully against all standards before generating the final JSON output.`;\n\nmsg.method = 'POST';\nmsg.url = \"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyDNsDm21xV4kqBp07ZS8DxfsIQeWPljspc\"\n\nmsg.headers = {\n    'Content-Type': 'application/json',\n};\n\nconst jsonContent = JSON.stringify(record);\nmsg[\"originalRecord\"] = record;\nmsg.payload = {\n    system_instruction: {\n      \"parts\": [\n        {\n          \"text\": systemPrompt\n        }\n      ]\n    },\n    \"contents\": [\n        {\n            \"role\": \"user\",\n            \"parts\": [\n                {\n                    \"text\": `Please analyze the following wind turbine status data and return the assessment in the specified JSON format:\\n\\n\\`\\`\\`json\\n${jsonContent}\\n\\`\\`\\``\n                }\n            ]\n        }\n    ],\n    \"generationConfig\": {\n        \"temperature\": 0.8,\n        \"response_mime_type\": \"application/json\",\n    },\n};\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 340,
+        "y": 440,
+        "wires": [
+            [
+                "ba1b090d555311e7"
+            ]
+        ]
+    },
+    {
+        "id": "ba1b090d555311e7",
+        "type": "http request",
+        "z": "0d755ec2dbc73aa9",
+        "name": "",
+        "method": "POST",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "eaf41837d7a494f2",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 550,
+        "y": 440,
+        "wires": [
+            [
+                "fed927ecf75b0ddb"
+            ]
+        ]
+    },
+    {
+        "id": "fed927ecf75b0ddb",
+        "type": "function",
+        "z": "0d755ec2dbc73aa9",
+        "name": "getResultFromAI",
+        "func": "if (msg.payload.error) {\n    const {code, message, status, details} = msg.payload.error;\n    msg.payload = message;\n    return msg;\n}\n\nconst resultText = msg.payload.candidates?.[0].content.parts[0].text;\nconst result = JSON.parse(resultText);\nmsg.payload = result;\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 750,
+        "y": 440,
+        "wires": [
+            [
+                "56b2f661fb6d9050",
+                "2287995d05f881c1",
+                "7dfdd8051b12bf7e"
+            ]
+        ]
+    },
+    {
+        "id": "56b2f661fb6d9050",
+        "type": "function",
+        "z": "0d755ec2dbc73aa9",
+        "name": "StoreInS3",
+        "func": "// 假设 msg.payload = { turbineId:\"TURB-003\", ts:\"2025-05-02T15:45:26.000Z\", fault:1, severity:3, score:0.95 }\n\n// 1. 准备要写入 S3 的文件内容（这里用 JSON 格式，也可改成 CSV、TXT）\nconst result = msg.payload;\nconst body = JSON.stringify(result, null, 2);\n\n// 2. 构造 S3.putObject 所需的参数\nmsg.params = {\n  Bucket: \"turbine-result-info\",\n  Key: `results/${result.turbineId}_${result.ts}.json`,  \n  Body: body,\n  ContentType: \"application/json\"\n};\n\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 140,
+        "y": 560,
+        "wires": [
+            [
+                "c37ee6bb839280da"
+            ]
+        ]
+    },
+    {
+        "id": "c37ee6bb839280da",
+        "type": "simple-aws",
+        "z": "0d755ec2dbc73aa9",
+        "aws": "7a29d172b02282fe",
+        "name": "putObject",
+        "service": "S3",
+        "serviceOptions": "{}",
+        "operation": "putObject",
+        "apiVersion": "2006-03-01",
+        "parameter": "params",
+        "parameterType": "msg",
+        "paging": "disabled",
+        "x": 340,
+        "y": 660,
+        "wires": [
+            [
+                "b5439da9a706ca58"
+            ],
+            [
+                "b5439da9a706ca58"
+            ]
+        ]
+    },
+    {
+        "id": "b5439da9a706ca58",
+        "type": "debug",
+        "z": "0d755ec2dbc73aa9",
+        "name": "debug 1",
+        "active": true,
+        "tosidebar": true,
+        "console": true,
+        "tostatus": true,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "payload",
+        "statusType": "auto",
+        "x": 570,
+        "y": 700,
+        "wires": []
+    },
+    {
+        "id": "45fd78d4e9e3ce99",
+        "type": "websocket out",
+        "z": "0d755ec2dbc73aa9",
+        "name": "",
+        "server": "50160e2f1017e311",
+        "client": "",
+        "x": 1160,
+        "y": 560,
+        "wires": []
+    },
+    {
+        "id": "2287995d05f881c1",
+        "type": "function",
+        "z": "0d755ec2dbc73aa9",
+        "name": "formResult",
+        "func": "msg.payload = {...msg.payload, ...msg.originalRecord};\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 910,
+        "y": 560,
+        "wires": [
+            [
+                "45fd78d4e9e3ce99",
+                "08136ea584803625"
+            ]
+        ]
+    },
+    {
+        "id": "08136ea584803625",
+        "type": "debug",
+        "z": "0d755ec2dbc73aa9",
+        "name": "debug 2",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1160,
+        "y": 460,
+        "wires": []
+    },
+    {
+        "id": "7dfdd8051b12bf7e",
+        "type": "debug",
+        "z": "0d755ec2dbc73aa9",
+        "name": "debug 3",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1060,
+        "y": 380,
+        "wires": []
+    },
+    {
+        "id": "13faf7c78fa70b93",
+        "type": "AWS Config",
+        "name": "AWS Config",
+        "region": "us-east-1"
+    },
+    {
+        "id": "eaf41837d7a494f2",
+        "type": "tls-config",
+        "name": "",
+        "cert": "",
+        "key": "",
+        "ca": "",
+        "certname": "",
+        "keyname": "",
+        "caname": "",
+        "servername": "",
+        "verifyservercert": true,
+        "alpnprotocol": ""
+    },
+    {
+        "id": "7a29d172b02282fe",
+        "type": "AWS Config",
+        "name": "AWS Config",
+        "region": "us-east-1"
+    },
+    {
+        "id": "50160e2f1017e311",
+        "type": "websocket-listener",
+        "path": "/ws/checkResult",
+        "wholemsg": "false"
+    }
+]
